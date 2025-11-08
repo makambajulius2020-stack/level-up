@@ -1,0 +1,409 @@
+{
+  "name": "Smart School - Attendance Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "attendance_alert",
+        "options": {}
+      },
+      "id": "webhook-attendance",
+      "name": "Attendance Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "attendance-alert-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.data.attendance_status}}",
+              "operation": "equal",
+              "value2": "absent"
+            }
+          ]
+        }
+      },
+      "id": "if-absent",
+      "name": "If Student Absent",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.data.attendance_status}}",
+              "operation": "equal",
+              "value2": "late"
+            }
+          ]
+        }
+      },
+      "id": "if-late",
+      "name": "If Student Late",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 500]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format SMS message for absent student\nconst data = items[0].json.data;\n\nconst message = `Dear ${data.parent_name || 'Parent'},\\n\\nYour child ${data.student_name} was marked ABSENT from school today (${data.date}).\\n\\nPlease contact the school if there are any concerns.\\n\\nSmart School Uganda\\n${data.class}`;\n\nreturn [{\n  json: {\n    ...data,\n    sms_message: message,\n    alert_type: 'absent'\n  }\n}];"
+      },
+      "id": "format-absent-sms",
+      "name": "Format Absent SMS",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format SMS message for late student\nconst data = items[0].json.data;\n\nconst message = `Dear ${data.parent_name || 'Parent'},\\n\\nYour child ${data.student_name} arrived LATE to school today at ${data.time} (${data.date}).\\n\\nPlease ensure punctuality.\\n\\nSmart School Uganda\\n${data.class}`;\n\nreturn [{\n  json: {\n    ...data,\n    sms_message: message,\n    alert_type: 'late'\n  }\n}];"
+      },
+      "id": "format-late-sms",
+      "name": "Format Late SMS",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.parent_phone}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "check-phone",
+      "name": "Check Phone Number",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "https://api.africastalking.com/version1/messaging",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{$credentials.africasTalkingApi.apiKey}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "={{$credentials.africasTalkingApi.username}}"
+            },
+            {
+              "name": "to",
+              "value": "={{$json.parent_phone}}"
+            },
+            {
+              "name": "message",
+              "value": "={{$json.sms_message}}"
+            },
+            {
+              "name": "from",
+              "value": "SmartSchool"
+            }
+          ]
+        }
+      },
+      "id": "send-sms",
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 200],
+      "credentials": {
+        "africasTalkingApi": {
+          "id": "1",
+          "name": "Africa's Talking API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.parent_email}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "check-email",
+      "name": "Check Email Address",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format email content\nconst data = items[0].json;\n\nlet subject, htmlContent;\n\nif (data.alert_type === 'absent') {\n  subject = `Attendance Alert: ${data.student_name} - Absent`;\n  htmlContent = `\n    <div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">\n      <div style=\"background-color: #dc3545; color: white; padding: 20px; text-align: center;\">\n        <h2>Attendance Alert - Student Absent</h2>\n      </div>\n      <div style=\"padding: 20px; background-color: #f8f9fa;\">\n        <h3>Dear ${data.parent_name || 'Parent'},</h3>\n        <p>We are writing to inform you that your child <strong>${data.student_name}</strong> was marked <strong>ABSENT</strong> from school today.</p>\n        \n        <div style=\"background-color: white; padding: 15px; border-left: 4px solid #dc3545; margin: 20px 0;\">\n          <h4>Attendance Details:</h4>\n          <ul>\n            <li><strong>Student:</strong> ${data.student_name}</li>\n            <li><strong>Class:</strong> ${data.class}</li>\n            <li><strong>Date:</strong> ${data.date}</li>\n            <li><strong>Status:</strong> Absent</li>\n          </ul>\n        </div>\n        \n        <p>If your child is unwell or there are other circumstances preventing attendance, please contact the school office immediately.</p>\n        \n        <div style=\"background-color: #e9ecef; padding: 15px; margin: 20px 0;\">\n          <h4>Contact Information:</h4>\n          <p><strong>School Phone:</strong> +256700000000<br>\n          <strong>Email:</strong> info@smartschool.ug</p>\n        </div>\n        \n        <p>Thank you for your attention to this matter.</p>\n        \n        <p>Best regards,<br>\n        <strong>Smart School Uganda</strong></p>\n      </div>\n    </div>\n  `;\n} else {\n  subject = `Attendance Alert: ${data.student_name} - Late Arrival`;\n  htmlContent = `\n    <div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">\n      <div style=\"background-color: #ffc107; color: black; padding: 20px; text-align: center;\">\n        <h2>Attendance Alert - Late Arrival</h2>\n      </div>\n      <div style=\"padding: 20px; background-color: #f8f9fa;\">\n        <h3>Dear ${data.parent_name || 'Parent'},</h3>\n        <p>We are writing to inform you that your child <strong>${data.student_name}</strong> arrived <strong>LATE</strong> to school today.</p>\n        \n        <div style=\"background-color: white; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;\">\n          <h4>Attendance Details:</h4>\n          <ul>\n            <li><strong>Student:</strong> ${data.student_name}</li>\n            <li><strong>Class:</strong> ${data.class}</li>\n            <li><strong>Date:</strong> ${data.date}</li>\n            <li><strong>Arrival Time:</strong> ${data.time}</li>\n            <li><strong>Status:</strong> Late</li>\n          </ul>\n        </div>\n        \n        <p>Please ensure your child arrives at school on time to avoid missing important lessons and activities.</p>\n        \n        <div style=\"background-color: #e9ecef; padding: 15px; margin: 20px 0;\">\n          <h4>School Hours:</h4>\n          <p><strong>Morning Assembly:</strong> 7:30 AM<br>\n          <strong>Classes Begin:</strong> 8:00 AM</p>\n        </div>\n        \n        <p>Thank you for your cooperation.</p>\n        \n        <p>Best regards,<br>\n        <strong>Smart School Uganda</strong></p>\n      </div>\n    </div>\n  `;\n}\n\nreturn [{\n  json: {\n    ...data,\n    email_subject: subject,\n    email_html: htmlContent\n  }\n}];"
+      },
+      "id": "format-email",
+      "name": "Format Email Content",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@smartschool.ug",
+        "toEmail": "={{$json.parent_email}}",
+        "subject": "={{$json.email_subject}}",
+        "emailType": "html",
+        "message": "={{$json.email_html}}"
+      },
+      "id": "send-email",
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1340, 400],
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "School SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Combine SMS and Email results\nconst smsResult = items[0]?.json || {};\nconst emailResult = items[1]?.json || {};\n\nconst combinedResult = {\n  student_id: smsResult.student_id || emailResult.student_id,\n  notification_status: 'success',\n  sms_sent: !!smsResult.SMSMessageData,\n  email_sent: !!emailResult.messageId,\n  timestamp: new Date().toISOString(),\n  sms_response: smsResult,\n  email_response: emailResult\n};\n\nreturn [{ json: combinedResult }];"
+      },
+      "id": "combine-results",
+      "name": "Combine Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{$env.SCHOOL_API_BASE_URL}}/api/n8n/webhook/attendance-processed",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Key",
+              "value": "={{$env.SCHOOL_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{JSON.stringify($json)}}"
+      },
+      "id": "callback-to-school",
+      "name": "Callback to School System",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"success\", \"message\": \"Attendance alert processed\", \"timestamp\": \"{{new Date().toISOString()}}\"}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "Attendance Webhook": {
+      "main": [
+        [
+          {
+            "node": "If Student Absent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If Student Late",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Student Absent": {
+      "main": [
+        [
+          {
+            "node": "Format Absent SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Student Late": {
+      "main": [
+        [
+          {
+            "node": "Format Late SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Absent SMS": {
+      "main": [
+        [
+          {
+            "node": "Check Phone Number",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Email Address",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Late SMS": {
+      "main": [
+        [
+          {
+            "node": "Check Phone Number",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Email Address",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Phone Number": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Email Address": {
+      "main": [
+        [
+          {
+            "node": "Format Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Alert": {
+      "main": [
+        [
+          {
+            "node": "Combine Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Email Content": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Alert": {
+      "main": [
+        [
+          {
+            "node": "Combine Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Results": {
+      "main": [
+        [
+          {
+            "node": "Callback to School System",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback to School System": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "attendance-alert-workflow",
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "1",
+      "name": "Smart School"
+    }
+  ]
+}

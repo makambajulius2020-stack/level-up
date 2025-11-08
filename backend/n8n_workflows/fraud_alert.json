@@ -1,0 +1,369 @@
+{
+  "name": "Smart School - Fraud Detection Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fraud_alert",
+        "options": {}
+      },
+      "id": "webhook-fraud",
+      "name": "Fraud Alert Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "fraud-alert-webhook"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Assess fraud risk level and determine response\nconst data = items[0].json.data;\nconst riskScore = parseFloat(data.risk_score || 0);\nconst alertType = data.alert_type || 'unknown';\n\nlet severity, urgencyLevel, actionRequired, alertColor;\n\nif (riskScore >= 0.8 || alertType === 'suspicious_login') {\n  severity = 'CRITICAL';\n  urgencyLevel = 'immediate';\n  actionRequired = 'Account suspension and immediate investigation';\n  alertColor = '#dc3545';\n} else if (riskScore >= 0.6 || alertType === 'unusual_activity') {\n  severity = 'HIGH';\n  urgencyLevel = 'urgent';\n  actionRequired = 'Enhanced monitoring and verification required';\n  alertColor = '#fd7e14';\n} else if (riskScore >= 0.4) {\n  severity = 'MEDIUM';\n  urgencyLevel = 'normal';\n  actionRequired = 'Monitor activity and review patterns';\n  alertColor = '#ffc107';\n} else {\n  severity = 'LOW';\n  urgencyLevel = 'low';\n  actionRequired = 'Log for analysis and continue monitoring';\n  alertColor = '#28a745';\n}\n\n// Format alert message\nconst alertMessage = `🚨 FRAUD ALERT - ${severity}\\n\\nUser: ${data.user_name} (${data.user_role})\\nAlert Type: ${alertType}\\nRisk Score: ${(riskScore * 100).toFixed(1)}%\\nActivity: ${data.suspicious_activity}\\nTime: ${data.timestamp}\\nLocation: ${data.location || 'Unknown'}\\nIP: ${data.ip_address || 'Unknown'}\\n\\nAction Required: ${actionRequired}\\n\\nSmart School Security System`;\n\nreturn [{\n  json: {\n    ...data,\n    severity,\n    urgency_level: urgencyLevel,\n    action_required: actionRequired,\n    alert_color: alertColor,\n    alert_message: alertMessage,\n    risk_percentage: (riskScore * 100).toFixed(1)\n  }\n}];"
+      },
+      "id": "assess-risk",
+      "name": "Assess Risk Level",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.severity}}",
+              "operation": "equal",
+              "value2": "CRITICAL"
+            }
+          ]
+        }
+      },
+      "id": "if-critical",
+      "name": "If Critical Alert",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.severity}}",
+              "operation": "equal",
+              "value2": "HIGH"
+            }
+          ]
+        }
+      },
+      "id": "if-high",
+      "name": "If High Risk",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Get admin users for critical alerts\nconst adminPhones = [\n  '+256700000001', // Head Teacher\n  '+256700000002', // IT Administrator\n  '+256700000003'  // Security Officer\n];\n\nconst data = items[0].json;\n\nreturn adminPhones.map(phone => ({\n  json: {\n    ...data,\n    admin_phone: phone,\n    alert_priority: 'CRITICAL - IMMEDIATE ACTION REQUIRED'\n  }\n}));"
+      },
+      "id": "get-admin-contacts-critical",
+      "name": "Get Admin Contacts (Critical)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 100]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Get admin users for high risk alerts\nconst adminPhones = [\n  '+256700000001', // Head Teacher\n  '+256700000002'  // IT Administrator\n];\n\nconst data = items[0].json;\n\nreturn adminPhones.map(phone => ({\n  json: {\n    ...data,\n    admin_phone: phone,\n    alert_priority: 'HIGH RISK - URGENT REVIEW NEEDED'\n  }\n}));"
+      },
+      "id": "get-admin-contacts-high",
+      "name": "Get Admin Contacts (High)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "https://api.africastalking.com/version1/messaging",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{$credentials.africasTalkingApi.apiKey}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "={{$credentials.africasTalkingApi.username}}"
+            },
+            {
+              "name": "to",
+              "value": "={{$json.admin_phone}}"
+            },
+            {
+              "name": "message",
+              "value": "={{$json.alert_message}}"
+            },
+            {
+              "name": "from",
+              "value": "SchoolSecurity"
+            }
+          ]
+        }
+      },
+      "id": "send-admin-sms",
+      "name": "Send Admin SMS Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 200],
+      "credentials": {
+        "africasTalkingApi": {
+          "id": "1",
+          "name": "Africa's Talking API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format detailed email report for fraud alert\nconst data = items[0].json;\nconst timestamp = new Date(data.timestamp).toLocaleString('en-UG', {\n  timeZone: 'Africa/Kampala',\n  year: 'numeric',\n  month: 'long',\n  day: 'numeric',\n  hour: '2-digit',\n  minute: '2-digit',\n  second: '2-digit'\n});\n\nconst htmlContent = `\n<div style=\"font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto;\">\n  <div style=\"background-color: ${data.alert_color}; color: white; padding: 20px; text-align: center;\">\n    <h2>🚨 FRAUD DETECTION ALERT - ${data.severity}</h2>\n    <p style=\"margin: 5px 0; font-size: 16px;\">${data.alert_priority}</p>\n  </div>\n  \n  <div style=\"padding: 20px; background-color: #f8f9fa;\">\n    <div style=\"background-color: white; padding: 20px; border-left: 4px solid ${data.alert_color}; margin: 20px 0;\">\n      <h3>🎯 Alert Summary</h3>\n      <table style=\"width: 100%; border-collapse: collapse;\">\n        <tr style=\"border-bottom: 1px solid #eee;\">\n          <td style=\"padding: 8px; font-weight: bold; width: 30%;\">Alert Type:</td>\n          <td style=\"padding: 8px;\">${data.alert_type}</td>\n        </tr>\n        <tr style=\"border-bottom: 1px solid #eee;\">\n          <td style=\"padding: 8px; font-weight: bold;\">Risk Score:</td>\n          <td style=\"padding: 8px;\"><span style=\"color: ${data.alert_color}; font-weight: bold; font-size: 18px;\">${data.risk_percentage}%</span></td>\n        </tr>\n        <tr style=\"border-bottom: 1px solid #eee;\">\n          <td style=\"padding: 8px; font-weight: bold;\">Severity:</td>\n          <td style=\"padding: 8px;\"><span style=\"background-color: ${data.alert_color}; color: white; padding: 4px 8px; border-radius: 4px;\">${data.severity}</span></td>\n        </tr>\n        <tr>\n          <td style=\"padding: 8px; font-weight: bold;\">Timestamp:</td>\n          <td style=\"padding: 8px;\">${timestamp}</td>\n        </tr>\n      </table>\n    </div>\n    \n    <div style=\"background-color: white; padding: 20px; border-left: 4px solid #17a2b8; margin: 20px 0;\">\n      <h3>👤 User Information</h3>\n      <table style=\"width: 100%; border-collapse: collapse;\">\n        <tr style=\"border-bottom: 1px solid #eee;\">\n          <td style=\"padding: 8px; font-weight: bold; width: 30%;\">User ID:</td>\n          <td style=\"padding: 8px;\">${data.user_id || 'Unknown'}</td>\n        </tr>\n        <tr style=\"border-bottom: 1px solid #eee;\">\n          <td style=\"padding: 8px; font-weight: bold;\">Name:</td>\n          <td style=\"padding: 8px;\">${data.user_name || 'Unknown'}</td>\n        </tr>\n        <tr>\n          <td style=\"padding: 8px; font-weight: bold;\">Role:</td>\n          <td style=\"padding: 8px;\">${data.user_role || 'Unknown'}</td>\n        </tr>\n      </table>\n    </div>\n    \n    <div style=\"background-color: white; padding: 20px; border-left: 4px solid #ffc107; margin: 20px 0;\">\n      <h3>🔍 Technical Details</h3>\n      <table style=\"width: 100%; border-collapse: collapse;\">\n        <tr style=\"border-bottom: 1px solid #eee;\">\n          <td style=\"padding: 8px; font-weight: bold; width: 30%;\">IP Address:</td>\n          <td style=\"padding: 8px;\">${data.ip_address || 'Unknown'}</td>\n        </tr>\n        <tr style=\"border-bottom: 1px solid #eee;\">\n          <td style=\"padding: 8px; font-weight: bold;\">Location:</td>\n          <td style=\"padding: 8px;\">${data.location || 'Unknown'}</td>\n        </tr>\n        <tr>\n          <td style=\"padding: 8px; font-weight: bold;\">Suspicious Activity:</td>\n          <td style=\"padding: 8px;\">${data.suspicious_activity || 'Not specified'}</td>\n        </tr>\n      </table>\n    </div>\n    \n    <div style=\"background-color: ${data.severity === 'CRITICAL' ? '#f8d7da' : '#fff3cd'}; padding: 20px; margin: 20px 0; border-radius: 5px;\">\n      <h3 style=\"color: ${data.severity === 'CRITICAL' ? '#721c24' : '#856404'}; margin-top: 0;\">⚡ Required Action</h3>\n      <p style=\"color: ${data.severity === 'CRITICAL' ? '#721c24' : '#856404'}; font-weight: bold; margin: 0;\">${data.action_required}</p>\n    </div>\n    \n    ${data.severity === 'CRITICAL' ? `\n    <div style=\"background-color: #dc3545; color: white; padding: 20px; margin: 20px 0; border-radius: 5px; text-align: center;\">\n      <h3 style=\"margin-top: 0;\">🚨 IMMEDIATE ACTIONS REQUIRED</h3>\n      <ul style=\"text-align: left; margin: 15px 0;\">\n        <li>Suspend user account immediately</li>\n        <li>Review all recent user activities</li>\n        <li>Contact user for verification</li>\n        <li>Check for data breaches</li>\n        <li>Document incident for investigation</li>\n      </ul>\n    </div>\n    ` : data.severity === 'HIGH' ? `\n    <div style=\"background-color: #fd7e14; color: white; padding: 20px; margin: 20px 0; border-radius: 5px; text-align: center;\">\n      <h3 style=\"margin-top: 0;\">⚠️ URGENT REVIEW REQUIRED</h3>\n      <ul style=\"text-align: left; margin: 15px 0;\">\n        <li>Enable enhanced monitoring for this user</li>\n        <li>Review recent login patterns</li>\n        <li>Verify user identity if possible</li>\n        <li>Check for unusual data access</li>\n      </ul>\n    </div>\n    ` : ''}\n    \n    <div style=\"background-color: #e9ecef; padding: 15px; margin: 20px 0; border-radius: 5px;\">\n      <h4>📞 Emergency Contacts</h4>\n      <p><strong>IT Security:</strong> +256700000002</p>\n      <p><strong>Head Teacher:</strong> +256700000001</p>\n      <p><strong>System Admin:</strong> admin@smartschool.ug</p>\n    </div>\n    \n    <p><strong>This alert was generated automatically by the Smart School Security System.</strong></p>\n    <p>Please take appropriate action based on the severity level and document all actions taken.</p>\n    \n    <p>Best regards,<br>\n    <strong>Smart School Security System</strong></p>\n  </div>\n  \n  <div style=\"background-color: #6c757d; color: white; padding: 10px; text-align: center; font-size: 12px;\">\n    <p>This is an automated security alert. Do not reply to this email.</p>\n    <p>Alert ID: FRAUD-${Date.now()}</p>\n  </div>\n</div>\n`;\n\nreturn [{\n  json: {\n    ...data,\n    email_html: htmlContent,\n    email_subject: `🚨 FRAUD ALERT [${data.severity}] - ${data.user_name} (${data.alert_type})`\n  }\n}];"
+      },
+      "id": "format-email-report",
+      "name": "Format Email Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "fromEmail": "security@smartschool.ug",
+        "toEmail": "admin@smartschool.ug,security@smartschool.ug",
+        "subject": "={{$json.email_subject}}",
+        "emailType": "html",
+        "message": "={{$json.email_html}}"
+      },
+      "id": "send-email-report",
+      "name": "Send Email Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1120, 500],
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "School SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Combine all alert results\nconst smsResults = items.filter(item => item.json.SMSMessageData);\nconst emailResult = items.find(item => item.json.messageId) || {};\n\nconst combinedResult = {\n  user_id: items[0]?.json?.user_id,\n  alert_type: items[0]?.json?.alert_type,\n  notification_status: 'success',\n  sms_alerts_sent: smsResults.length,\n  email_sent: !!emailResult.json?.messageId,\n  severity: items[0]?.json?.severity,\n  action_taken: 'alerts_dispatched',\n  timestamp: new Date().toISOString(),\n  admin_contacts_notified: smsResults.length,\n  sms_responses: smsResults.map(r => r.json),\n  email_response: emailResult.json\n};\n\nreturn [{ json: combinedResult }];"
+      },
+      "id": "combine-alert-results",
+      "name": "Combine Alert Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{$env.SCHOOL_API_BASE_URL}}/api/n8n/webhook/fraud-alert-processed",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Key",
+              "value": "={{$env.SCHOOL_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{JSON.stringify($json)}}"
+      },
+      "id": "callback-to-school",
+      "name": "Callback to School System",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"success\", \"message\": \"Fraud alert processed and dispatched\", \"timestamp\": \"{{new Date().toISOString()}}\"}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Fraud Alert Webhook": {
+      "main": [
+        [
+          {
+            "node": "Assess Risk Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess Risk Level": {
+      "main": [
+        [
+          {
+            "node": "If Critical Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If High Risk",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Email Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Critical Alert": {
+      "main": [
+        [
+          {
+            "node": "Get Admin Contacts (Critical)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If High Risk": {
+      "main": [
+        [
+          {
+            "node": "Get Admin Contacts (High)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Admin Contacts (Critical)": {
+      "main": [
+        [
+          {
+            "node": "Send Admin SMS Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Admin Contacts (High)": {
+      "main": [
+        [
+          {
+            "node": "Send Admin SMS Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Admin SMS Alert": {
+      "main": [
+        [
+          {
+            "node": "Combine Alert Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Email Report": {
+      "main": [
+        [
+          {
+            "node": "Send Email Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Report": {
+      "main": [
+        [
+          {
+            "node": "Combine Alert Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Alert Results": {
+      "main": [
+        [
+          {
+            "node": "Callback to School System",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback to School System": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "fraud-alert-workflow",
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "1",
+      "name": "Smart School"
+    }
+  ]
+}

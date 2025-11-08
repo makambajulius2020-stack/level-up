@@ -1,0 +1,320 @@
+{
+  "name": "Smart School - Payment Reminder",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "payment_reminder",
+        "options": {}
+      },
+      "id": "webhook-payment",
+      "name": "Payment Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "payment-reminder-webhook"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format payment reminder message based on urgency\nconst data = items[0].json.data;\nconst urgency = data.urgency || 'normal';\nconst amount = parseFloat(data.amount || 0);\nconst currency = 'UGX';\n\nlet smsMessage, emailSubject, urgencyColor, urgencyText;\n\nswitch(urgency) {\n  case 'overdue':\n    urgencyColor = '#dc3545';\n    urgencyText = 'OVERDUE';\n    smsMessage = `URGENT: Dear ${data.parent_name || 'Parent'}, your child ${data.student_name}'s school fees of ${currency} ${amount.toLocaleString()} is OVERDUE. Please pay immediately to avoid penalties. Pay via MTN MoMo: *165*3# or Airtel Money: *185#. Smart School Uganda`;\n    emailSubject = `URGENT: Overdue Payment - ${data.student_name}`;\n    break;\n  case 'due_soon':\n    urgencyColor = '#ffc107';\n    urgencyText = 'DUE SOON';\n    smsMessage = `Dear ${data.parent_name || 'Parent'}, reminder: ${data.student_name}'s school fees of ${currency} ${amount.toLocaleString()} is due on ${data.due_date}. Pay via MTN MoMo: *165*3# or Airtel Money: *185#. Smart School Uganda`;\n    emailSubject = `Payment Reminder - ${data.student_name} (Due Soon)`;\n    break;\n  default:\n    urgencyColor = '#28a745';\n    urgencyText = 'REMINDER';\n    smsMessage = `Dear ${data.parent_name || 'Parent'}, school fees reminder for ${data.student_name}: ${currency} ${amount.toLocaleString()} due ${data.due_date}. Pay via MTN MoMo: *165*3# or Airtel Money: *185#. Smart School Uganda`;\n    emailSubject = `Payment Reminder - ${data.student_name}`;\n}\n\nreturn [{\n  json: {\n    ...data,\n    sms_message: smsMessage,\n    email_subject: emailSubject,\n    urgency_color: urgencyColor,\n    urgency_text: urgencyText,\n    formatted_amount: `${currency} ${amount.toLocaleString()}`\n  }\n}];"
+      },
+      "id": "format-payment-message",
+      "name": "Format Payment Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.parent_phone}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "check-phone",
+      "name": "Check Phone Number",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.parent_email}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "check-email",
+      "name": "Check Email Address",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "https://api.africastalking.com/version1/messaging",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{$credentials.africasTalkingApi.apiKey}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "={{$credentials.africasTalkingApi.username}}"
+            },
+            {
+              "name": "to",
+              "value": "={{$json.parent_phone}}"
+            },
+            {
+              "name": "message",
+              "value": "={{$json.sms_message}}"
+            },
+            {
+              "name": "from",
+              "value": "SmartSchool"
+            }
+          ]
+        }
+      },
+      "id": "send-sms",
+      "name": "Send SMS Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 200],
+      "credentials": {
+        "africasTalkingApi": {
+          "id": "1",
+          "name": "Africa's Talking API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format detailed email content for payment reminder\nconst data = items[0].json;\nconst amount = parseFloat(data.amount || 0);\nconst currency = 'UGX';\n\nconst htmlContent = `\n<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">\n  <div style=\"background-color: ${data.urgency_color}; color: white; padding: 20px; text-align: center;\">\n    <h2>Payment Reminder - ${data.urgency_text}</h2>\n  </div>\n  \n  <div style=\"padding: 20px; background-color: #f8f9fa;\">\n    <h3>Dear ${data.parent_name || 'Parent'},</h3>\n    \n    <p>This is a ${data.urgency_text.toLowerCase()} reminder regarding school fees for your child <strong>${data.student_name}</strong>.</p>\n    \n    <div style=\"background-color: white; padding: 20px; border-left: 4px solid ${data.urgency_color}; margin: 20px 0;\">\n      <h4>Payment Details:</h4>\n      <table style=\"width: 100%; border-collapse: collapse;\">\n        <tr style=\"border-bottom: 1px solid #eee;\">\n          <td style=\"padding: 8px; font-weight: bold;\">Student:</td>\n          <td style=\"padding: 8px;\">${data.student_name}</td>\n        </tr>\n        <tr style=\"border-bottom: 1px solid #eee;\">\n          <td style=\"padding: 8px; font-weight: bold;\">Amount Due:</td>\n          <td style=\"padding: 8px; color: ${data.urgency_color}; font-weight: bold; font-size: 18px;\">${data.formatted_amount}</td>\n        </tr>\n        <tr style=\"border-bottom: 1px solid #eee;\">\n          <td style=\"padding: 8px; font-weight: bold;\">Due Date:</td>\n          <td style=\"padding: 8px;\">${data.due_date}</td>\n        </tr>\n        <tr style=\"border-bottom: 1px solid #eee;\">\n          <td style=\"padding: 8px; font-weight: bold;\">Payment Type:</td>\n          <td style=\"padding: 8px;\">${data.payment_type || 'School Fees'}</td>\n        </tr>\n        <tr>\n          <td style=\"padding: 8px; font-weight: bold;\">Term:</td>\n          <td style=\"padding: 8px;\">${data.term || 'Current Term'}</td>\n        </tr>\n      </table>\n    </div>\n    \n    <div style=\"background-color: #e8f5e8; padding: 20px; margin: 20px 0; border-radius: 5px;\">\n      <h4 style=\"color: #28a745; margin-top: 0;\">💳 Easy Payment Options:</h4>\n      \n      <div style=\"margin: 15px 0;\">\n        <h5 style=\"color: #ff6b00; margin-bottom: 5px;\">📱 MTN Mobile Money:</h5>\n        <p style=\"margin: 5px 0;\">• Dial <strong>*165*3#</strong></p>\n        <p style=\"margin: 5px 0;\">• Select \"Pay Bill\"</p>\n        <p style=\"margin: 5px 0;\">• Enter Business Number: <strong>600100</strong></p>\n        <p style=\"margin: 5px 0;\">• Reference: <strong>${data.student_name} - ${data.student_id}</strong></p>\n      </div>\n      \n      <div style=\"margin: 15px 0;\">\n        <h5 style=\"color: #ff0000; margin-bottom: 5px;\">📱 Airtel Money:</h5>\n        <p style=\"margin: 5px 0;\">• Dial <strong>*185#</strong></p>\n        <p style=\"margin: 5px 0;\">• Select \"Pay Bill\"</p>\n        <p style=\"margin: 5px 0;\">• Enter Merchant Code: <strong>500100</strong></p>\n        <p style=\"margin: 5px 0;\">• Reference: <strong>${data.student_name} - ${data.student_id}</strong></p>\n      </div>\n      \n      <div style=\"margin: 15px 0;\">\n        <h5 style=\"color: #1a73e8; margin-bottom: 5px;\">🏦 Bank Transfer:</h5>\n        <p style=\"margin: 5px 0;\">• Account Name: <strong>Smart School Uganda</strong></p>\n        <p style=\"margin: 5px 0;\">• Account Number: <strong>1234567890</strong></p>\n        <p style=\"margin: 5px 0;\">• Bank: <strong>Stanbic Bank Uganda</strong></p>\n        <p style=\"margin: 5px 0;\">• Reference: <strong>${data.student_name} - ${data.student_id}</strong></p>\n      </div>\n    </div>\n    \n    ${data.urgency === 'overdue' ? \n      '<div style=\"background-color: #f8d7da; color: #721c24; padding: 15px; margin: 20px 0; border-radius: 5px;\"><strong>⚠️ Important:</strong> This payment is overdue. Please settle immediately to avoid late payment penalties and ensure your child\\'s continued education.</div>' : \n      data.urgency === 'due_soon' ? \n      '<div style=\"background-color: #fff3cd; color: #856404; padding: 15px; margin: 20px 0; border-radius: 5px;\"><strong>⏰ Reminder:</strong> This payment is due soon. Please make arrangements to pay before the due date.</div>' :\n      '<div style=\"background-color: #d1ecf1; color: #0c5460; padding: 15px; margin: 20px 0; border-radius: 5px;\"><strong>📋 Note:</strong> Thank you for your attention to this payment reminder.</div>'\n    }\n    \n    <div style=\"background-color: #e9ecef; padding: 15px; margin: 20px 0; border-radius: 5px;\">\n      <h4>📞 Need Help?</h4>\n      <p><strong>School Office:</strong> +256700000000</p>\n      <p><strong>Email:</strong> accounts@smartschool.ug</p>\n      <p><strong>Office Hours:</strong> Monday - Friday, 8:00 AM - 5:00 PM</p>\n    </div>\n    \n    <p>Thank you for your prompt attention to this matter. Your child's education is our priority.</p>\n    \n    <p>Best regards,<br>\n    <strong>Smart School Uganda</strong><br>\n    <em>Accounts Department</em></p>\n  </div>\n  \n  <div style=\"background-color: #6c757d; color: white; padding: 10px; text-align: center; font-size: 12px;\">\n    <p>This is an automated message from Smart School Uganda. Please do not reply to this email.</p>\n  </div>\n</div>\n`;\n\nreturn [{\n  json: {\n    ...data,\n    email_html: htmlContent\n  }\n}];"
+      },
+      "id": "format-email",
+      "name": "Format Email Content",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "fromEmail": "accounts@smartschool.ug",
+        "toEmail": "={{$json.parent_email}}",
+        "subject": "={{$json.email_subject}}",
+        "emailType": "html",
+        "message": "={{$json.email_html}}"
+      },
+      "id": "send-email",
+      "name": "Send Email Reminder",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1120, 400],
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "School SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Combine SMS and Email results\nconst smsResult = items[0]?.json || {};\nconst emailResult = items[1]?.json || {};\n\nconst combinedResult = {\n  student_id: smsResult.student_id || emailResult.student_id,\n  notification_status: 'success',\n  sms_sent: !!smsResult.SMSMessageData,\n  email_sent: !!emailResult.messageId,\n  payment_method: 'mobile_money_bank',\n  timestamp: new Date().toISOString(),\n  urgency: smsResult.urgency || emailResult.urgency,\n  amount: smsResult.amount || emailResult.amount,\n  sms_response: smsResult,\n  email_response: emailResult\n};\n\nreturn [{ json: combinedResult }];"
+      },
+      "id": "combine-results",
+      "name": "Combine Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{$env.SCHOOL_API_BASE_URL}}/api/n8n/webhook/payment-processed",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Key",
+              "value": "={{$env.SCHOOL_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{JSON.stringify($json)}}"
+      },
+      "id": "callback-to-school",
+      "name": "Callback to School System",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"success\", \"message\": \"Payment reminder processed\", \"timestamp\": \"{{new Date().toISOString()}}\"}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Payment Webhook": {
+      "main": [
+        [
+          {
+            "node": "Format Payment Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Payment Message": {
+      "main": [
+        [
+          {
+            "node": "Check Phone Number",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Email Address",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Phone Number": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Email Address": {
+      "main": [
+        [
+          {
+            "node": "Format Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Reminder": {
+      "main": [
+        [
+          {
+            "node": "Combine Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Email Content": {
+      "main": [
+        [
+          {
+            "node": "Send Email Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Reminder": {
+      "main": [
+        [
+          {
+            "node": "Combine Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Results": {
+      "main": [
+        [
+          {
+            "node": "Callback to School System",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback to School System": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "payment-reminder-workflow",
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "1",
+      "name": "Smart School"
+    }
+  ]
+}

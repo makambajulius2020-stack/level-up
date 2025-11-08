@@ -1,0 +1,326 @@
+{
+  "name": "Smart School - AI Tutor Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai_tutor",
+        "options": {}
+      },
+      "id": "webhook-ai-tutor",
+      "name": "AI Tutor Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "webhookId": "ai-tutor-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.userRole}}",
+              "operation": "equal",
+              "value2": "student"
+            }
+          ]
+        }
+      },
+      "id": "if-student",
+      "name": "If Student",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [400, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.userRole}}",
+              "operation": "equal",
+              "value2": "teacher"
+            }
+          ]
+        }
+      },
+      "id": "if-teacher",
+      "name": "If Teacher",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.userRole}}",
+              "operation": "equal",
+              "value2": "parent"
+            }
+          ]
+        }
+      },
+      "id": "if-parent",
+      "name": "If Parent",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5000/student-ai/ai-tools/language-lesson",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "language",
+              "value": "={{$json.language || 'English'}}"
+            },
+            {
+              "name": "level",
+              "value": "={{$json.level || 'intermediate'}}"
+            },
+            {
+              "name": "topic",
+              "value": "={{$json.topic || 'general studies'}}"
+            },
+            {
+              "name": "lessonType",
+              "value": "={{$json.lessonType || 'general'}}"
+            },
+            {
+              "name": "studentId",
+              "value": "={{$json.studentId || 1}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "student-ai-api",
+      "name": "Student AI API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [600, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5000/ai-teaching/ai-tools/assignment-scaffold",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignment",
+              "value": "={{$json.message || $json.assignment}}"
+            },
+            {
+              "name": "gradeLevel",
+              "value": "={{$json.gradeLevel || 'Grade 5'}}"
+            },
+            {
+              "name": "subject",
+              "value": "={{$json.subject || 'General'}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "teacher-ai-api",
+      "name": "Teacher AI API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5000/student-ai/ai-tools/career-assessment",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "interests",
+              "value": "={{$json.interests || ['General']}}"
+            },
+            {
+              "name": "subjects",
+              "value": "={{$json.subjects || ['Mathematics', 'English']}}"
+            },
+            {
+              "name": "skills",
+              "value": "={{$json.skills || ['Problem solving', 'Communication']}}"
+            },
+            {
+              "name": "gradeLevel",
+              "value": "={{$json.gradeLevel || 'Grade 5'}}"
+            },
+            {
+              "name": "studentId",
+              "value": "={{$json.studentId || 1}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "parent-ai-api",
+      "name": "Parent AI API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [600, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{{\n  \"success\": true,\n  \"message\": \"AI tutor response generated successfully\",\n  \"data\": $json.data,\n  \"timestamp\": new Date().toISOString()\n}}}",
+        "options": {}
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{{\n  \"success\": false,\n  \"message\": \"AI tutor service temporarily unavailable\",\n  \"error\": $json.message,\n  \"timestamp\": new Date().toISOString()\n}}}",
+        "options": {}
+      },
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [800, 500]
+    }
+  ],
+  "connections": {
+    "webhook-ai-tutor": {
+      "main": [
+        [
+          {
+            "node": "if-student",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "if-student": {
+      "main": [
+        [
+          {
+            "node": "student-ai-api",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "if-teacher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "if-teacher": {
+      "main": [
+        [
+          {
+            "node": "teacher-ai-api",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "if-parent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "if-parent": {
+      "main": [
+        [
+          {
+            "node": "parent-ai-api",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "student-ai-api": {
+      "main": [
+        [
+          {
+            "node": "respond-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "teacher-ai-api": {
+      "main": [
+        [
+          {
+            "node": "respond-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parent-ai-api": {
+      "main": [
+        [
+          {
+            "node": "respond-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "ai-tutor-workflow",
+  "tags": []
+}
