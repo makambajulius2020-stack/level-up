@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
       port: 3002,
       host: true,
       allowedHosts: [
-        'https://level-up-6mst.onrender.com',
+        'level-up-6mst.onrender.com',
         'localhost',
         '127.0.0.1'
       ]
@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
       port: 3002,
       host: true,
       allowedHosts: [
-        'https://level-up-6mst.onrender.com',
+        'level-up-6mst.onrender.com',
         'localhost',
         '127.0.0.1'
       ]
